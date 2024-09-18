@@ -15,16 +15,15 @@ import Testing
         let docsDir = tempDir + "/checkout/.docs/\(pathFragment)/\(ref)"
         let indexJSON = "\(docsDir)/index/index.json".lowercased()
         #expect(FileManager.default.fileExists(atPath: indexJSON))
-#warning("FIXME: convert these")
-//        let index = #require(DocArchive.Index(path: indexJSON))
-//        #expect(index.interfaceLanguages.swift.map(\.path) == [
-//            "/documentation/svd2swift"
-//        ])
-//        let jsonFiles = try await Current.shell.run(command: .ls("\(docsDir)/data/documentation/svd2swift"))
-//            .split(separator: "\n")
-//            .sorted()
-//        XCTAssertEqual(jsonFiles.count, 2)
-//        XCTAssertEqual(jsonFiles, ["usingsvd2swift.json", "usingsvd2swiftplugin.json"])
+        let index = try #require(DocArchive.Index(path: indexJSON))
+        #expect(index.interfaceLanguages.swift.map(\.path) == [
+            "/documentation/svd2swift"
+        ])
+        let jsonFiles = try await Shell.run(command: .ls("\(docsDir)/data/documentation/svd2swift"))
+            .split(separator: "\n")
+            .sorted()
+        #expect(jsonFiles.count == 2)
+        #expect(jsonFiles == ["usingsvd2swift.json", "usingsvd2swiftplugin.json"])
     }
 }
 
@@ -39,10 +38,9 @@ func generateDocs(cloneURL: String,
         let buildDir = tempDir.appending("/checkout")
         try await Builder.checkout(cloneURL: cloneURL, reference: reference, workDir: buildDir)
 
-        let docsDirectory = DocsDirectory(repository: repository,
-                                          reference: reference,
-                                          workDir: buildDir)
+        let docsDirectory = DocsDirectory(repository: repository, reference: reference, workDir: buildDir)
         try await Builder.generateDocs(docsDirectory: docsDirectory, target: target, workDir: buildDir)
+
         try await validation(tempDir)
     }
 }

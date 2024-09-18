@@ -20,6 +20,7 @@ enum Shell {
         do {
             print("🖥️ \(command)")
             let (stdout, _) = try await ShellOut.shellOut(to: command, at: path, environment: filteredEnvironment)
+            print(stdout)
             return stdout
         } catch let error as ShellOutError {
             let stdout = error.output
