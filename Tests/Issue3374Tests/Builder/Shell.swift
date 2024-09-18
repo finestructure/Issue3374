@@ -12,14 +12,14 @@ enum Shell {
     static func run(command: ShellOutCommand,
                     at path: String = ".",
                     environment: [String: String] = [:]) async throws -> String {
-        let env = ProcessInfo.processInfo.environment
+        let filteredEnvironment = ProcessInfo.processInfo.environment
             .filter { allowedEnvVariables.contains($0.key) }
             .merging(environment, uniquingKeysWith: { _, last in last })
             .merging( ["SPI_BUILDER": "1"], uniquingKeysWith: { _, last in last } )
 
         do {
             print("🖥️ \(command)")
-            let (stdout, _) = try await ShellOut.shellOut(to: command, at: path, environment: environment)
+            let (stdout, _) = try await ShellOut.shellOut(to: command, at: path, environment: filteredEnvironment)
             return stdout
         } catch let error as ShellOutError {
             let stdout = error.output
