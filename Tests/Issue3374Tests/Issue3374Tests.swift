@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 
-@Test func example() async throws {
+@Test func issue3374() async throws {
     // https://github.com/SwiftPackageIndex/SwiftPackageIndex-Server/issues/2504
     let cloneURL = "https://github.com/finestructure/swift-mmio"
     let ref = "issue-3374"
