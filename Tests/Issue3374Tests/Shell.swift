@@ -101,4 +101,33 @@ extension ShellOutCommand {
     static func touch(_ arguments: String...) -> Self {
         .init(command: "touch", arguments: arguments)
     }
+
+    static func xcrun() -> Self {
+        .env(#"DEVELOPER_DIR=/Applications/Xcode-15.4.0.app"#, "xcrun")
+    }
+
+    static func xcrun(_ arguments: [String]) -> Self {
+        xcrun().appending(arguments: arguments)
+    }
+}
+
+
+enum PackageSwift {
+    /// Append the swift-docc-plugin package dependency to the Package.swift file if it is not in the file already.
+    /// - Parameter version: Version of the docc plugin, for example `"1.0.0"`
+    /// - Returns: the `ShelloutCommand`
+    static func appendDoccPlugin(version: String) -> ShellOutCommand {
+        .bash(arguments: ["""
+            shopt -s nullglob && for manifest in Package.swift Package@*.swift ; do
+            if ! grep -E -i "https://github.com/(apple|swiftlang)/swift-docc-plugin" "$manifest" ; then
+            cat <<EOF >> "$manifest"
+            
+            package.dependencies.append(
+                .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "\(version)")
+            )
+            EOF
+            fi
+            done
+            """.verbatim])
+    }
 }

@@ -9,7 +9,9 @@ import Testing
     let ref = "issue-3374"
     let pathFragment = "finestructure/swift-mmio"
     try await generateDocs(cloneURL: cloneURL,
-                           reference: ref) { tempDir in
+                           repository: .init(owner: "finestructure", name: "swift-mmio"),
+                           reference: ref,
+                           target: "SVD2Swift") { tempDir in
         let docsDir = tempDir + "/checkout/.docs/\(pathFragment)/\(ref)"
         let indexJSON = "\(docsDir)/index/index.json".lowercased()
         #expect(FileManager.default.fileExists(atPath: indexJSON))
@@ -28,43 +30,86 @@ import Testing
 
 
 func generateDocs(cloneURL: String,
+                  repository: Github.Repository,
                   reference: String,
-                  target: String? = nil,
+                  target: String,
                   validation: (String) async throws -> Void = { _ in },
                   file: StaticString = #filePath, line: UInt = #line) async throws {
     try await withTempDir { tempDir in
         let buildDir = tempDir.appending("/checkout")
-        try await checkout(cloneURL: cloneURL, reference: reference, workDir: buildDir)
+        try await Builder.checkout(cloneURL: cloneURL, reference: reference, workDir: buildDir)
 
-#warning("FIXME: convert these")
-//        guard let docTargets = target.map({ [$0] }) ?? Manifest.load(in: buildDir)?
-//            .documentationTargets(platform: platform, swiftVersion: swiftVersion) else {
-//            XCTFail("no doc targets found", file: file, line: line)
-//            return
-//        }
-//
-//        let docsDirectory = try DocsDirectory(cloneURL: cloneURL,
-//                                              reference: reference,
-//                                              workDir: buildDir)
-//        let sourceService = try SourceService(checkoutPath: buildDir, cloneURL: cloneURL, reference: reference)
-//        try await Builder.GenerateDocs.run(docsDirectory: docsDirectory,
-//                                           hostVolume: Builder.defaultHostVolume,
-//                                           platform: platform,
-//                                           sourceService: sourceService,
-//                                           swiftVersion: swiftVersion,
-//                                           targets: docTargets,
-//                                           workDir: buildDir)
-//        try await validation(tempDir)
+        let docsDirectory = DocsDirectory(repository: repository,
+                                          reference: reference,
+                                          workDir: buildDir)
+        try await Builder.generateDocs(docsDirectory: docsDirectory, target: target, workDir: buildDir)
+        try await validation(tempDir)
     }
 }
 
 
-func checkout(cloneURL: String, reference: String, workDir: String) async throws {
-    try await Shell.run(command: .mkdir(workDir))
-    try await Shell.run(command: .git("init", "."), at: workDir)
-    try await Shell.run(command: .git("remote", "add", "origin", URL(string: cloneURL)!.absoluteString), at: workDir)
-    try await Shell.run(command: .git("fetch", "origin", "--depth=1", reference), at: workDir)
-    try await Shell.run(command: .git("reset", "--hard", "FETCH_HEAD"), at: workDir)
-    // make sure we initialise and update any submodules
-    try await Shell.run(command: .gitSubmoduleUpdate(initializeIfNeeded: true, recursive: true, quiet: false), at: workDir)
+enum Builder {
+    static func checkout(cloneURL: String, reference: String, workDir: String) async throws {
+        try await Shell.run(command: .mkdir(workDir))
+        try await Shell.run(command: .git("init", "."), at: workDir)
+        try await Shell.run(command: .git("remote", "add", "origin", URL(string: cloneURL)!.absoluteString), at: workDir)
+        try await Shell.run(command: .git("fetch", "origin", "--depth=1", reference), at: workDir)
+        try await Shell.run(command: .git("reset", "--hard", "FETCH_HEAD"), at: workDir)
+        // make sure we initialise and update any submodules
+        try await Shell.run(command: .gitSubmoduleUpdate(initializeIfNeeded: true, recursive: true, quiet: false), at: workDir)
+    }
+
+
+    static func generateDocs(docsDirectory: DocsDirectory, target: String, workDir: String) async throws {
+        let docsPath = workDir + "/" + DocsDirectory.directoryName
+        do {  // (Re-)create output path directory
+            if FileManager.default.fileExists(atPath: docsPath) {
+                try FileManager.default.removeItem(atPath: docsPath)
+                precondition(!FileManager.default.fileExists(atPath: docsPath), "Working directory must be removed")
+            }
+            try FileManager.default.createDirectory(atPath: docsDirectory.outputPath,
+                                                    withIntermediateDirectories: true)
+        }
+
+        try await Shell.run(command: PackageSwift.appendDoccPlugin(version: "1.0.0"), at: workDir)
+
+        // hard-coding some values here
+        let customParameters = ["--symbol-graph-minimum-access-level public",
+                                "--verbose"]
+        try await Shell.run(
+            command: .xcrun(.spmGenerateDocs(target: target,
+                                             hostingBasePath: docsDirectory.hostingBasePath,
+                                             outputPath: docsDirectory.relativeOutputPath,
+                                             customParameters: customParameters)),
+            at: workDir,
+            environment: .generateDocs
+        )
+
+    }
+}
+
+extension [String] {
+    static func spmGenerateDocs(target: String,
+                                hostingBasePath: String,
+                                outputPath: String,
+                                customParameters: [String] = []) -> Self {
+        [
+            "swift", "package",
+            "--allow-writing-to-directory",
+            outputPath,
+            "generate-documentation",
+            "--emit-digest",
+            "--disable-indexing",
+            "--output-path", outputPath,
+            "--hosting-base-path", hostingBasePath,
+            "--target", target,
+        ]
+        + customParameters
+    }
+}
+
+
+extension Dictionary<String, String> {
+    static let build = ["SPI_BUILD": "1"]
+    static let generateDocs = ["SPI_GENERATE_DOCS": "1"]
 }
