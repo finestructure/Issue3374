@@ -27,7 +27,7 @@ enum Builder {
         try await Shell.run(command: PackageSwift.appendDoccPlugin(version: "1.0.0"), at: workDir)
 
         // hard-coding some values here
-        let customParameters = ["--symbol-graph-minimum-access-level public",
+        let customParameters = ["--symbol-graph-minimum-access-level", "public",
                                 "--verbose"]
         try await Shell.run(
             command: .xcrun(.spmGenerateDocs(target: target,
